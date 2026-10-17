@@ -1,0 +1,8 @@
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
+
+# Security: force patched versions of vulnerable indirect dependencies (pnpm audit in CI).
+# lodash < 4.18 (code injection, prototype pollution) comes in via prisma > @prisma/studio-core.
+overrides:
+  lodash: ^4.18.1

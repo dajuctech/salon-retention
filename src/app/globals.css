@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens from design/Barbing Salon Retention and Booking System.pdf (UI_UX_DESIGN_PLAN §1).
+ * Values are approximate; replace them with exact values from the design export.
+ */
+:root {
+  --brand-900: #0f3b2c;
+  --brand-700: #2f5a4a;
+  --brand-50: #e7f0ea;
+  --accent-500: #c9a44c;
+  --accent-50: #f6ecd2;
+  --surface: #f3f2ee;
+  --card: #ffffff;
+  --border: #e3e1da;
+  --ink: #14211b;
+  --ink-muted: #5b625e; /* must stay ≥ 4.5:1 on white (NFR-ACC) */
+  --status-confirmed: #e2efe6;
+  --status-in-chair: #f8e9c8;
+  --status-done: #ebebe8;
+  --status-danger: #f9e0dc;
+  --status-danger-ink: #9b2c1f;
+  --status-new: #e1ebf8;
+  --radius-card: 16px;
+  /* Chart marks: validated with the dataviz palette checks (light mode; the app has no dark mode). */
+  --chart-1: #1f8558;
+  --chart-highlight: #c9a44c;
+}
+
+@theme inline {
+  --color-brand-900: var(--brand-900);
+  --color-brand-700: var(--brand-700);
+  --color-brand-50: var(--brand-50);
+  --color-accent-500: var(--accent-500);
+  --color-accent-50: var(--accent-50);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-status-confirmed: var(--status-confirmed);
+  --color-status-in-chair: var(--status-in-chair);
+  --color-status-done: var(--status-done);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-ink: var(--status-danger-ink);
+  --color-status-new: var(--status-new);
+  --radius-card: var(--radius-card);
+  --color-chart-1: var(--chart-1);
+  --color-chart-highlight: var(--chart-highlight);
+  --font-sans: var(--font-geist-sans);
+}
+
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}

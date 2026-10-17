@@ -1,0 +1,10 @@
+# Reviewers requested automatically on pull requests (CONTRIBUTING.md § Code review).
+*                         @dajuctech
+
+# Changes here need the most care: tenant isolation, auth, payments, AI, migrations.
+/src/server/db.ts         @dajuctech
+/src/server/auth/         @dajuctech
+/src/server/payments/     @dajuctech
+/src/server/ai/           @dajuctech
+/src/domain/ai-guardrails.ts @dajuctech
+/prisma/migrations/       @dajuctech

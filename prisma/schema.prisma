@@ -1,0 +1,681 @@
+// Data model for the Barbing Salon Retention & Booking System.
+// Conventions: docs/adr/0008-data-conventions.md
+// - Money: Int in minor units + currency code. Time: timestamptz (UTC). Phones: E.164.
+// - Every tenant-owned model has salonId and is queried through forSalon() (ADR-0002).
+// - Auth tables follow Better Auth's core + organization plugin schema (ADR-0003);
+//   re-check with `npx @better-auth/cli generate` when upgrading Better Auth.
+// - Booking overlap is prevented by a Postgres exclusion constraint added in raw SQL
+//   (prisma/sql/booking_no_overlap.sql), which Prisma cannot express.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Connection URL lives in prisma.config.ts (Prisma 7).
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Auth (Better Auth) ─────────────────────────
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  twoFactorEnabled Boolean? @default(false) // Better Auth two-factor plugin
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @db.Timestamptz
+  sessions      Session[]
+  accounts      Account[]
+  memberships   Member[]
+  invitationsSent Invitation[]
+  twoFactors    TwoFactor[]
+
+  @@map("user")
+}
+
+model Session {
+  id                   String   @id
+  expiresAt            DateTime @db.Timestamptz
+  token                String   @unique
+  createdAt            DateTime @default(now()) @db.Timestamptz
+  updatedAt            DateTime @updatedAt @db.Timestamptz
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz
+  refreshTokenExpiresAt DateTime? @db.Timestamptz
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz
+  updatedAt             DateTime  @updatedAt @db.Timestamptz
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+/// Authenticator-app secret and hashed backup codes (Better Auth two-factor plugin).
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String
+  userId                  String
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0)
+  lockedUntil             DateTime? @db.Timestamptz
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([secret])
+  @@index([userId])
+  @@map("twoFactor")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  updatedAt  DateTime @updatedAt @db.Timestamptz
+
+  @@map("verification")
+}
+
+/// A salon (tenant). Membership and roles are managed by the app, not Better Auth (ADR-0003).
+model Salon {
+  id        String   @id
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  // Salon configuration
+  countryCode   String  // ISO-3166 alpha-2, default phone region
+  timezone      String  // IANA, e.g. Africa/Lagos
+  currency      String  // ISO-4217, e.g. NGN
+  whatsappNumber String? // shown in Settings; the sending number is configured per provider
+  bookingEnabled Boolean @default(true)
+  autoConfirm    Boolean @default(true)
+  slotGridMinutes     Int @default(15)
+  minLeadMinutes      Int @default(60)
+  maxAdvanceDays      Int @default(30)
+  cancelCutoffMinutes Int @default(120)
+  noShowGraceMinutes  Int @default(15)
+
+  // Messaging configuration (BR-R*)
+  messagingPaused        Boolean @default(false)
+  dayBeforeReminderOn    Boolean @default(true)
+  dayBeforeReminderHour  Int     @default(18)
+  shortReminderOn        Boolean @default(true)
+  shortReminderHours     Int     @default(2)
+  birthdayMessageOn      Boolean @default(true)
+  winbackOn              Boolean @default(true)
+  winbackGraceDays       Int     @default(7)
+  winbackCooldownDays    Int     @default(21)
+  marketingCapPerWeek    Int     @default(2)
+  quietHoursStart        Int     @default(20)
+  quietHoursEnd          Int     @default(8)
+
+  // Loyalty (BR-L*)
+  loyaltyOn        Boolean @default(false)
+  loyaltyThreshold Int     @default(10)
+
+  // AI (ai-design.md §5)
+  aiMonthlyBudgetMicroUsd Int @default(2000000)
+
+  // Payments (ADR-0006): money goes to the salon's own account, never ours.
+  paymentProvider        PaymentProviderKind?
+  paymentProviderAccount String?  @unique // Paystack subaccount code (ACCT_…) or Stripe connected account (acct_…)
+  paymentAccountReady    Boolean  @default(false) // Paystack: subaccount created; Stripe: charges_enabled
+  paymentAccountLabel    String?  // shown in Settings, e.g. "GTBank ••••1234"
+
+  members        Member[]
+  invitations    Invitation[]
+  openingHours   OpeningHours[]
+  closedDates    ClosedDate[]
+  services       Service[]
+  barbers        Barber[]
+  customers      Customer[]
+  bookings       Booking[]
+  payments       Payment[]
+  consents       Consent[]
+  templates      MessageTemplate[]
+  messages       Message[]
+  inbound        InboundMessage[]
+  conversations  Conversation[]
+  promotions     Promotion[]
+  redemptions    LoyaltyRedemption[]
+  aiGenerations  AIGeneration[]
+  auditLogs      AuditLog[]
+
+  @@map("salon")
+}
+
+enum MemberRole {
+  owner
+  receptionist
+  barber
+}
+
+/// A user's role in one salon (docs/permissions.md). Read through src/server/auth, not forSalon().
+model Member {
+  id        String     @id @default(cuid())
+  salonId   String
+  userId    String
+  role      MemberRole
+  active    Boolean    @default(true) // US-04: deactivation removes access immediately
+  createdAt DateTime   @default(now()) @db.Timestamptz
+  salon     Salon      @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  barber    Barber?
+
+  @@unique([salonId, userId])
+  @@index([userId])
+  @@map("member")
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+/// US-03 staff invitation. The token is only ever stored hashed (SHA-256).
+model Invitation {
+  id        String           @id @default(cuid())
+  salonId   String
+  email     String
+  role      MemberRole
+  barberId  String?          // link the new member to an existing barber profile
+  tokenHash String           @unique
+  status    InvitationStatus @default(PENDING)
+  expiresAt DateTime         @db.Timestamptz
+  inviterId String
+  createdAt DateTime         @default(now()) @db.Timestamptz
+  salon     Salon            @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  inviter   User             @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([salonId, status])
+  @@map("invitation")
+}
+
+// ───────────────────────── Salon setup ─────────────────────────
+
+model OpeningHours {
+  id        String @id @default(cuid())
+  salonId   String
+  weekday   Int    // 0 = Sunday … 6 = Saturday
+  startMin  Int    // minutes from local midnight
+  endMin    Int
+  salon     Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
+
+  @@index([salonId, weekday])
+}
+
+model ClosedDate {
+  id      String   @id @default(cuid())
+  salonId String
+  date    DateTime @db.Date // salon-local date
+  reason  String?
+  salon   Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+
+  @@unique([salonId, date])
+}
+
+model Service {
+  id                 String  @id @default(cuid())
+  salonId            String
+  name               String
+  durationMin        Int
+  bufferMin          Int     @default(0)
+  priceMinor         Int
+  currency           String
+  returnReminderDays Int?    // fallback usual gap for customers with < 3 visits (BR-R3a)
+  loyaltyReward      Boolean @default(false) // can be redeemed as the free service (BR-L2)
+  active             Boolean @default(true)
+  sortOrder          Int     @default(0)
+  salon              Salon   @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  bookings           Booking[]
+
+  @@index([salonId, active])
+}
+
+model Barber {
+  id           String  @id @default(cuid())
+  salonId      String
+  memberId     String? @unique // null if the barber has no login
+  displayName  String
+  sortOrder    Int     @default(0)
+  active       Boolean @default(true)
+  salon        Salon   @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  member       Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  workingHours BarberHours[]
+  timeOff      TimeOff[]
+  bookings     Booking[]
+  preferredBy  Customer[]
+
+  @@index([salonId, active])
+}
+
+model BarberHours {
+  id       String @id @default(cuid())
+  salonId  String
+  barberId String
+  weekday  Int
+  startMin Int
+  endMin   Int
+  barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@index([barberId, weekday])
+}
+
+model TimeOff {
+  id       String   @id @default(cuid())
+  salonId  String
+  barberId String
+  startsAt DateTime @db.Timestamptz
+  endsAt   DateTime @db.Timestamptz
+  reason   String?
+  barber   Barber   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@index([barberId, startsAt])
+}
+
+// ───────────────────────── Customers & consent ─────────────────────────
+
+model Customer {
+  id                String    @id @default(cuid())
+  salonId           String
+  name              String
+  phoneE164         String
+  email             String?
+  birthMonth        Int?
+  birthDay          Int?
+  birthYear         Int?
+  preferredBarberId String?
+  preferredStyle    String?
+  notes             String?
+  // Denormalised stats, recomputed on booking completion (BR-B5, BR-R3a)
+  visitCount        Int       @default(0)
+  lastVisitAt       DateTime? @db.Timestamptz
+  usualGapDays      Int?
+  phoneInvalid      Boolean   @default(false) // set on not_on_whatsapp failures (BR-R9)
+  // Current consent, kept in step with the append-only Consent history in the same transaction.
+  utilityConsent    Boolean   @default(false)
+  marketingConsent  Boolean   @default(false)
+  anonymisedAt      DateTime? @db.Timestamptz // data-rights deletion (US-27)
+  holdout           Boolean   @default(false) // retention experiment control group (metrics.md)
+  createdAt         DateTime  @default(now()) @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @db.Timestamptz
+  salon             Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  preferredBarber   Barber?   @relation(fields: [preferredBarberId], references: [id], onDelete: SetNull)
+  bookings          Booking[]
+  consents          Consent[]
+  messages          Message[]
+  conversation      Conversation?
+  redemptions       LoyaltyRedemption[]
+
+  @@unique([salonId, phoneE164]) // BR-I2
+  @@index([salonId, lastVisitAt])
+  @@index([salonId, birthMonth, birthDay])
+}
+
+enum ConsentPurpose {
+  UTILITY
+  MARKETING
+}
+
+enum ConsentSource {
+  BOOKING_PAGE
+  STAFF_VERBAL
+  INBOUND_KEYWORD
+  STAFF_EDIT
+}
+
+/// Append-only consent history; the latest row per (customer, purpose) is current (BR-R1).
+model Consent {
+  id         String         @id @default(cuid())
+  salonId    String
+  customerId String
+  purpose    ConsentPurpose
+  granted    Boolean
+  source     ConsentSource
+  wording    String          // exact text shown when consent was captured
+  actorId    String?         // staff user, if any
+  createdAt  DateTime        @default(now()) @db.Timestamptz
+  salon      Salon           @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customer   Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, purpose, createdAt])
+}
+
+// ───────────────────────── Bookings & payments ─────────────────────────
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum BookingSource {
+  ONLINE
+  STAFF
+  WALK_IN
+}
+
+model Booking {
+  id             String        @id @default(cuid())
+  salonId        String
+  ref            String        // human-readable, e.g. SC-1042 — display only, never grants access
+  customerId     String
+  barberId       String
+  serviceId      String
+  startsAt       DateTime      @db.Timestamptz
+  endsAt         DateTime      @db.Timestamptz // start + duration + buffer (BR-A1)
+  status         BookingStatus
+  source         BookingSource
+  priceMinor     Int           // snapshot of the service price at booking time
+  currency       String
+  notes          String?
+  cancelReason   String?
+  createdById    String?       // staff user; null for online bookings
+  createdAt      DateTime      @default(now()) @db.Timestamptz
+  updatedAt      DateTime      @updatedAt @db.Timestamptz
+  salon          Salon         @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  barber         Barber        @relation(fields: [barberId], references: [id])
+  service        Service       @relation(fields: [serviceId], references: [id])
+  payments       Payment[]
+  messages       Message[]
+  redemption     LoyaltyRedemption?
+
+  @@unique([salonId, ref])
+  @@index([salonId, startsAt])
+  @@index([barberId, startsAt])
+  @@index([customerId, startsAt])
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  POS
+  CARD
+  ONLINE
+  LOYALTY
+}
+
+enum PaymentKind {
+  PAYMENT
+  REFUND
+  ADJUSTMENT
+}
+
+enum PaymentProviderKind {
+  PAYSTACK
+  STRIPE
+  FAKE // development stand-in (PAYMENTS_MODE=fake)
+}
+
+/// Immutable ledger rows (BR-P2). Booking payment status is derived (BR-P1).
+model Payment {
+  id                String         @id @default(cuid())
+  salonId           String
+  bookingId         String
+  kind              PaymentKind    @default(PAYMENT)
+  method            PaymentMethod
+  amountMinor       Int            // PAYMENT and REFUND are positive (REFUND subtracts); ADJUSTMENT is signed
+  currency          String
+  reference         String?
+  provider          PaymentProviderKind?
+  providerReference String?
+  correctsId        String?        // for REFUND / ADJUSTMENT
+  recordedById      String?
+  createdAt         DateTime       @default(now()) @db.Timestamptz
+  salon             Salon          @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  booking           Booking        @relation(fields: [bookingId], references: [id])
+
+  @@unique([provider, providerReference]) // webhook idempotency (BR-P3)
+  @@index([salonId, createdAt])
+  @@index([bookingId])
+}
+
+model LoyaltyRedemption {
+  id         String   @id @default(cuid())
+  salonId    String
+  customerId String
+  bookingId  String   @unique
+  createdById String?
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  salon      Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  booking    Booking  @relation(fields: [bookingId], references: [id])
+
+  @@index([customerId])
+}
+
+// ───────────────────────── Messaging ─────────────────────────
+
+enum MessageType {
+  BOOKING_CONFIRMATION
+  REMINDER_DAY_BEFORE
+  REMINDER_2H
+  WINBACK
+  BIRTHDAY
+  PROMOTION
+  OPTOUT_CONFIRMATION
+  STAFF_REPLY
+}
+
+enum MessageStatus {
+  DRAFT      // awaiting owner approval (win-back, promotion)
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+}
+
+enum TemplateCategory {
+  UTILITY
+  MARKETING
+}
+
+enum TemplateApproval {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  PAUSED
+}
+
+/// salonId null = platform-wide template on the shared number.
+model MessageTemplate {
+  id           String           @id @default(cuid())
+  salonId      String?
+  name         String           // e.g. winback_friendly_v1
+  variant      String?          // friendly | short | with_offer
+  type         MessageType
+  category     TemplateCategory
+  language     String           @default("en")
+  body         String
+  variables    String[]         // ordered DB field names for {{1}}, {{2}}, …
+  approval     TemplateApproval @default(DRAFT)
+  providerId   String?
+  aiGenerationId String?
+  createdAt    DateTime         @default(now()) @db.Timestamptz
+  salon        Salon?           @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  messages     Message[]
+
+  @@unique([salonId, name, language])
+}
+
+/// The Message table is also the job queue (ADR-0004).
+model Message {
+  id             String        @id @default(cuid())
+  salonId        String
+  customerId     String
+  bookingId      String?
+  promotionId    String?
+  type           MessageType
+  templateId     String?
+  variables      Json?         // resolved values, kept for the message log
+  renderedText   String        // what the customer sees (for log + preview)
+  whyNow         String?       // code-generated explanation for win-back drafts
+  status         MessageStatus
+  skipReason     String?       // no_consent | cap | booked_since | expired | holdout | …
+  failureReason  String?
+  idempotencyKey String        @unique // BR-R8
+  scheduledFor   DateTime      @db.Timestamptz
+  nextAttemptAt  DateTime?     @db.Timestamptz
+  attempts       Int           @default(0)
+  approvedById   String?
+  approvedAt     DateTime?     @db.Timestamptz
+  providerMessageId String?    @unique
+  sentAt         DateTime?     @db.Timestamptz
+  deliveredAt    DateTime?     @db.Timestamptz
+  readAt         DateTime?     @db.Timestamptz
+  createdAt      DateTime      @default(now()) @db.Timestamptz
+  salon          Salon         @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  booking        Booking?      @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  template       MessageTemplate? @relation(fields: [templateId], references: [id])
+  promotion      Promotion?    @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledFor]) // dispatcher claim query
+  @@index([salonId, createdAt])
+  @@index([customerId, type, createdAt])
+}
+
+enum ConversationStatus {
+  OPEN
+  HANDLED
+}
+
+model Conversation {
+  id              String             @id @default(cuid())
+  salonId         String
+  customerId      String?            @unique
+  phoneE164       String             // kept for unknown numbers
+  status          ConversationStatus @default(OPEN)
+  lastInboundAt   DateTime?          @db.Timestamptz // 24-hour window start (BR-R10)
+  unreadCount     Int                @default(0)
+  salon           Salon              @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customer        Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  inbound         InboundMessage[]
+
+  @@unique([salonId, phoneE164])
+}
+
+model InboundMessage {
+  id                String       @id @default(cuid())
+  salonId           String
+  conversationId    String
+  providerMessageId String       @unique // webhook idempotency
+  text              String
+  keyword           String?      // STOP | STOP ALL | START, if detected
+  receivedAt        DateTime     @db.Timestamptz
+  salon             Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, receivedAt])
+}
+
+// ───────────────────────── Promotions ─────────────────────────
+
+enum PromotionKind {
+  PERCENT
+  FIXED
+  FREE_SERVICE
+}
+
+model Promotion {
+  id             String        @id @default(cuid())
+  salonId        String
+  name           String
+  kind           PromotionKind
+  value          Int           // percent (0–100) or minor units; ignored for FREE_SERVICE
+  serviceIds     String[]
+  startsOn       DateTime      @db.Date
+  endsOn         DateTime      @db.Date
+  usesPerCustomer Int?
+  isBirthday     Boolean       @default(false)
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now()) @db.Timestamptz
+  salon          Salon         @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  messages       Message[]
+
+  @@index([salonId, active])
+}
+
+// ───────────────────────── AI & audit ─────────────────────────
+
+/// Every AI call is logged for traceability, evals and cost control (ai-design.md §3).
+model AIGeneration {
+  id               String   @id @default(cuid())
+  salonId          String
+  feature          String   // copy_assistant | insight_narration
+  promptVersion    String
+  provider         String
+  model            String
+  input            Json     // never contains customer personal data (ai-design.md §4)
+  rawOutput        Json?
+  guardrailResults Json?
+  selectedIndex    Int?
+  finalText        String?
+  approvedById     String?
+  inputTokens      Int?
+  outputTokens     Int?
+  costMicroUsd     Int?
+  latencyMs        Int?
+  error            String?
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  salon            Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+
+  @@index([salonId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  salonId    String
+  actorId    String?  // null for system/customer actions
+  actorType  String   // staff | customer | system | platform
+  action     String   // e.g. booking.status_changed, consent.revoked, customer.exported
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  salon      Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+
+  @@index([salonId, createdAt])
+  @@index([entityType, entityId])
+}
+
+/// Fixed-window counters for public rate limits (src/server/platform/rate-limit.ts).
+model RateLimitHit {
+  key    String
+  window Int
+  count  Int    @default(1)
+
+  @@id([key, window])
+}

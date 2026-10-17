@@ -1,0 +1,132 @@
+# CI gates (docs/testing-strategy.md, docs/operations.md).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: salon
+          POSTGRES_PASSWORD: salon
+          POSTGRES_DB: salon_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U salon" --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://salon:salon@localhost:5432/salon_test
+      # Test-only values; real secrets live in the hosting provider.
+      BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0000
+      BOOKING_LINK_SECRET: ci-only-booking-link-secret
+      CRON_SECRET: ci-only-cron-secret
+      EMAIL_TRANSPORT: console
+      HIBP_CHECK: "off"
+      META_APP_SECRET: ci-only-meta-app-secret
+      BOOKING_LIMIT_PER_IP: "1000"
+      # Browser tests use the simulated checkout and developer tools.
+      PAYMENTS_MODE: fake
+      ALLOW_DEV_TOOLS: "true"
+      APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma validate
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - name: Unit tests (domain coverage ≥ 90%)
+        run: pnpm test:coverage
+      - name: Migrate test database
+        run: pnpm db:deploy
+      - name: Integration tests (tenancy, double booking)
+        run: pnpm test:int
+      - name: Eval harness (fixtures; real-provider gate runs in the ai-evals job)
+        run: pnpm evals
+      - run: pnpm build
+      - name: Browser tests (production build, seeded demo data)
+        run: |
+          pnpm db:seed
+          pnpm exec playwright install --with-deps chromium webkit
+          pnpm start &
+          npx --yes wait-on http://localhost:3000/api/health --timeout 60000
+          BASE_URL=http://localhost:3000 pnpm test:e2e
+      - name: Performance budget (NFR-P1, Lighthouse mobile profile on the booking page)
+        run: |
+          # The app was started in the browser-test step; start it again if it isn't answering.
+          if ! curl -sf http://localhost:3000/api/health > /dev/null; then
+            pnpm start &
+            npx --yes wait-on http://localhost:3000/api/health --timeout 60000
+          fi
+          npx --yes @lhci/cli@0.15.1 autorun
+      - name: Keep the Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-report
+          path: .lighthouseci/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Dependency audit
+        run: pnpm audit --prod --audit-level high
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Real-model eval gate (evals/README.md). It costs money, so it runs only on pull requests that
+  # change the prompt, the AI adapters, the guardrails or the eval cases, and only once the
+  # ANTHROPIC_API_KEY repository secret is set.
+  ai-evals:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      AI_PROVIDER: anthropic
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: |
+          if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -qE '^(src/server/ai/|src/domain/ai-guardrails|evals/)'; then
+            echo "ai=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ai=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changes.outputs.ai == 'true' && env.ANTHROPIC_API_KEY == ''
+        run: echo "::warning::AI code changed but ANTHROPIC_API_KEY isn't set, so the real-model eval was skipped."
+      - uses: pnpm/action-setup@v5
+        if: steps.changes.outputs.ai == 'true' && env.ANTHROPIC_API_KEY != ''
+      - uses: actions/setup-node@v7
+        if: steps.changes.outputs.ai == 'true' && env.ANTHROPIC_API_KEY != ''
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: steps.changes.outputs.ai == 'true' && env.ANTHROPIC_API_KEY != ''
+        run: pnpm install --frozen-lockfile
+      - name: Eval gate against the real model
+        if: steps.changes.outputs.ai == 'true' && env.ANTHROPIC_API_KEY != ''
+        run: pnpm evals --gate

@@ -1,0 +1,18 @@
+# Non-Functional Requirements
+
+| ID | Area | Requirement | How it's verified |
+|---|---|---|---|
+| NFR-P1 | Performance | Public booking page: LCP (main content visible) < 2.5 s on a mid-range Android phone over slow 4G; JavaScript < 150 KB gzip for the first screen | Lighthouse CI on every PR (mobile profile, [lighthouserc.json](../lighthouserc.json)). Lighthouse applies real slow-4G and 4× CPU throttling (`throttlingMethod: devtools`), because the simulated mode overestimates LCP when a fast local server delivers everything before the first paint. **Measured 2026-10-17:** LCP 1.5 s, JS 142 KB, accessibility 100, performance 100 |
+| NFR-P2 | Performance | Staff pages: server response p95 < 500 ms; calendar week view loads in < 1.5 s | `pnpm load:test` before releases; Sentry performance traces in production. **Measured 2026-10-17** (one local Node process): 1 user p95 19 ms; 10 continuous users p95 ≤ 203 ms; 20 continuous users (~85 req/s, the single-process limit) p95 481–534 ms. Production scales horizontally on Vercel |
+| NFR-P3 | Low bandwidth | Booking flow works on 3G. No large images or web fonts on the critical path | Manual test with throttling |
+| NFR-A1 | Availability | Monthly uptime 99.5% for the booking page and API | Uptime monitor |
+| NFR-A2 | Message timeliness | 99% of due messages are sent within 10 minutes of `scheduledFor` | Dispatcher lag metric |
+| NFR-S1 | Scale (R1 design target) | 200 salons, 20k customers each, 500 bookings per salon per month, 50k messages per day | `pnpm load:test` covers slot queries and staff pages; **a dispatcher throughput test at 50k messages/day is still to do on staging** |
+| NFR-SEC | Security | See [security-privacy.md](security-privacy.md) | Security checklist and tests |
+| NFR-ACC | Accessibility | WCAG 2.1 AA: keyboard access everywhere, visible focus, 4.5:1 contrast, form labels, touch targets ≥ 44 px | axe checks in Playwright; manual screen-reader pass on the booking flow |
+| NFR-I18N | Internationalisation | Currency, timezone and phone region set per salon (done, with `Intl` formatting). R1 is English only, so UI text is not yet extracted; adopt `next-intl` and extract strings before adding a second language | Unit tests on formatting, time zones and DST |
+| NFR-COMPAT | Browsers | Customer side: last 2 versions of Chrome Android, Safari iOS, Samsung Internet, Opera Mini (works with basic features). Staff side: modern evergreen browsers on laptop and tablet | Playwright runs on a Chromium phone, a WebKit iPhone and desktop Chrome. Samsung Internet and Opera Mini: manual check before launch |
+| NFR-RES | Resilience | Messaging, payment or AI provider outages never block booking or recording. The work is queued or falls back to a simpler option | Integration tests with providers simulated as down |
+| NFR-DATA | Retention | See [security-privacy.md §Retention](security-privacy.md#retention) | Retention job ([src/server/platform/retention.ts](../src/server/platform/retention.ts)) runs with the hourly cron; integration tests in `retention.int.test.ts` |
+| NFR-OBS | Observability | Every request has a `requestId`; errors reach Sentry within 1 minute; logs contain no personal data | `x-request-id` set in [src/proxy.ts](../src/proxy.ts); JSON logs via [src/server/log.ts](../src/server/log.ts); redaction unit tests ([src/domain/redact.test.ts](../src/domain/redact.test.ts)); Sentry in `src/instrumentation*.ts` when `SENTRY_DSN` is set, configured to collect no personal data |
+| NFR-MAINT | Maintainability | TypeScript strict mode; `src/domain` covered ≥ 90% by tests; no lint errors; dependencies kept current by Renovate | CI gates |

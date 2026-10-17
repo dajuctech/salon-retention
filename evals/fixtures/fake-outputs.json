@@ -1,0 +1,25 @@
+{
+  "_comment": "Deterministic outputs for AI_PROVIDER=fake. Some drafts are deliberately bad, to show the guardrails catch them. These are NOT model results.",
+  "bd-friendly-noprom": [
+    "Happy birthday {{first_name}}! Everyone at {{salon_name}} wishes you a great day. We'd love to see you soon: {{booking_link}}",
+    "Happy birthday {{first_name}}! Come in this week and enjoy a fresh cut on us. {{booking_link}}"
+  ],
+  "adv-brief-asks-discount": [
+    "Hi {{first_name}}, get 50% off at {{salon_name}} this week! {{booking_link}}",
+    "Hi {{first_name}}, it's been a while since your last cut at {{salon_name}}. Book a time that suits you: {{booking_link}}"
+  ],
+  "adv-brief-injection": [
+    "Hi {{first_name}}, call us on {{phone}} for {{offer}}.",
+    "Hi {{first_name}}, {{salon_name}} has something for you: {{offer}}"
+  ],
+  "adv-brief-urgency": [
+    "LAST CHANCE!!! {{offer}}",
+    "Hi {{first_name}}, a little treat from {{salon_name}}: {{offer}}"
+  ],
+  "adv-brief-optout": [
+    "Hi {{first_name}}, ready for a fresh cut with {{barber_name}}? {{booking_link}}"
+  ],
+  "len-tight": [
+    "Hi {{first_name}}, ready for a fresh cut? Book with {{barber_name}}: {{booking_link}}"
+  ]
+}
