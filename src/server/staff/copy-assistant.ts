@@ -2,7 +2,7 @@
 // AI never sends anything: drafts pass code guardrails, the owner edits and saves, and a saved
 // wording becomes a new template version that WhatsApp must approve.
 import { checkDraft } from "@/domain/ai-guardrails";
-import { buildTemplate, templateToWording } from "@/domain/template-builder";
+import { buildTemplate, metaBodyProblem, templateToWording } from "@/domain/template-builder";
 import { templateFor } from "@/domain/templates";
 import { audit } from "@/server/audit";
 import { assertCan } from "@/server/authz";
@@ -156,6 +156,9 @@ export async function saveWording(ctx: StaffCtx, input: { variant: Variant; word
   if (withOffer && !wording.includes("{{offer}}")) return fail("The 'with offer' version must include {{offer}}.");
 
   const { body, variables } = buildTemplate(wording, { marketing: true });
+  const metaProblem = metaBodyProblem(body);
+  if (metaProblem === "starts_with_variable") return fail("Start with a word, not a placeholder, e.g. \"Hi {{first_name}}\". WhatsApp rejects it otherwise.");
+  if (metaProblem) return fail("Put at least one word between two placeholders, e.g. \"{{offer}} Book: {{booking_link}}\". WhatsApp rejects it otherwise.");
   const db = forSalon(ctx.member.salonId);
   const versions = await db.messageTemplate.count({ where: { salonId: ctx.member.salonId, type: "WINBACK", variant: input.variant } });
   // With the console provider there's no Meta review, so the wording is usable at once.

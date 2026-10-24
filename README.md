@@ -11,7 +11,7 @@ A multi-salon SaaS for barbing salons: customers book from their phone in under 
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-295_passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-302_passing-2ea44f)
 ![Lighthouse](https://img.shields.io/badge/Lighthouse-performance_100_·_accessibility_100-2ea44f?logo=lighthouse&logoColor=white)
 
 </div>
@@ -56,9 +56,9 @@ A multi-salon SaaS for barbing salons: customers book from their phone in under 
 
 | | |
 |---|---|
-| Unit tests | **157**, 95% coverage of business rules |
-| Integration tests (real PostgreSQL) | **61**: tenant isolation, double booking, payments, retention, AI feedback loop |
-| Browser tests | **77** across Chromium (Android-sized), WebKit (iPhone) and desktop, with automated accessibility checks |
+| Unit tests | **160**, 95% coverage of business rules |
+| Integration tests (real PostgreSQL) | **62**: tenant isolation, double booking, payments, retention, AI feedback loop |
+| Browser tests | **80** across Chromium (Android-sized), WebKit (iPhone) and desktop, with automated accessibility checks |
 | Booking page on a throttled slow-4G phone | Main content in **1.5 s**, 142 KB of JavaScript, Lighthouse performance **100**, accessibility **100** |
 | Load (one server process) | p95 of **140–200 ms** on the dashboard and calendar with 10 users hitting it non-stop |
 | Security | CodeQL, gitleaks secret scanning, dependency audit: **0 known vulnerabilities** |

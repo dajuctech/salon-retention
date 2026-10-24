@@ -2,18 +2,20 @@
 
 All templates are English (`en`) for R1. Variables use Meta's positional `{{1}}` syntax. The name in brackets after each variable shows which database field fills it. Template names are versioned (`_v1`). Changing the text means a new version and a new approval.
 
+**Meta's rules for the body** (a template that breaks them is rejected automatically): it must not start or end with a variable, and two variables must never sit side by side. A unit test checks every template here (`metaBodyProblem` in `src/domain/template-builder.ts`), and owners' own wording is checked the same way when they save it. Marketing templates include the opt-out line at the end of the **body** (not as a separate footer), so they always end with fixed text.
+
 The messages shown in the design (`design/*.pdf`) are mapped to these templates. Wording changes from the design are noted where they were needed: no promise to reply (BR-R11), and no offers written into the text (BR-PR2).
 
 ## Utility (automatic)
 
 ### `booking_confirmation_v1`
-> Hi {{1}[first_name]}, your {{2}[service_name]} at {{3}[salon_name]} is booked for {{4}[date_time_local]} with {{5}[barber_name]}. Booking ref {{6}[booking_ref]}. To change or cancel: {{7}[manage_link]}
+> Hi {{1}[first_name]}, your {{2}[service_name]} at {{3}[salon_name]} is booked for {{4}[date_time_local]} with {{5}[barber_name]}. Booking ref {{6}[booking_ref]}. To change or cancel: {{7}[manage_link]} See you then.
 
 ### `reminder_day_before_v1` — sent at 18:00 the evening before
-> Hi {{1}[first_name]}, your {{2}[service_name]} with {{3}[barber_name]} is tomorrow at {{4}[time_local]}. To change it: {{5}[manage_link]}
+> Hi {{1}[first_name]}, your {{2}[service_name]} with {{3}[barber_name]} is tomorrow at {{4}[time_local]}. To change it: {{5}[manage_link]} See you tomorrow.
 
 ### `reminder_2h_v1` — sent 2 hours before
-> Hi {{1}[first_name]}, your {{2}[service_name]} with {{3}[barber_name]} is at {{4}[time_local]} today. See you soon. To change it: {{5}[manage_link]}
+> Hi {{1}[first_name]}, your {{2}[service_name]} with {{3}[barber_name]} is at {{4}[time_local]} today. To change it: {{5}[manage_link]} See you soon.
 
 *(Design copy said "Reply if you need to change it". It now points to the manage link. Replies still reach the inbox.)*
 
@@ -24,7 +26,7 @@ The messages shown in the design (`design/*.pdf`) are mapped to these templates.
 
 ## Marketing (requires marketing consent)
 
-Every marketing template ends with the footer: `Reply STOP to opt out.`
+Every marketing template body ends with the opt-out line: `Reply STOP to opt out.`
 
 ### Win-back variants (owner approves each send, BR-R3c)
 
@@ -35,12 +37,12 @@ Every marketing template ends with the footer: `Reply STOP to opt out.`
 | With offer | `winback_offer_v1` | Hi {{1}[first_name]}, we've missed you at {{2}[salon_name]}. {{3}[offer_line]} Book: {{4}[booking_link]} |
 
 ### `birthday_v1`
-> Happy birthday {{1}[first_name]}! 🎉 Everyone at {{2}[salon_name]} wishes you a great day. {{3}[offer_line, or "We'd love to see you soon."]} {{4}[booking_link]}
+> Happy birthday {{1}[first_name]}! 🎉 Everyone at {{2}[salon_name]} wishes you a great day. {{3}[offer_line, or "We'd love to see you soon."]} Book your next cut: {{4}[booking_link]} Reply STOP to opt out.
 
 *(Design copy said "enjoy a fresh cut on us". This free offer now only appears when a birthday promotion exists, and the text comes from `offer_line`.)*
 
 ### `promotion_generic_v1`
-> {{1}[promotion_body — owner-approved text, may be AI-assisted]} Book: {{2}[booking_link]}
+> Message from {{1}[salon_name]}: {{2}[promotion_body — owner-approved text, may be AI-assisted]} Book: {{3}[booking_link]} Reply STOP to opt out.
 
 ## Notes
 

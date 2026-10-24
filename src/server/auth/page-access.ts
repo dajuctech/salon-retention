@@ -9,10 +9,11 @@ export type RecordKind = "customer" | "booking" | "conversation";
 type PageRule = { pattern: RegExp; capabilities?: Capability[]; roles?: Role[]; record?: RecordKind };
 
 /** Gated /app pages. Each page also calls the matching requirePage()/requireRecord() itself. */
+// Record ids never equal "new": /app/customers/new and /app/bookings/new are create pages, not records.
 export const STAFF_PAGE_RULES: PageRule[] = [
-  { pattern: /^\/app\/customers\/([^/]+)\/edit$/, capabilities: ["customers.edit"], record: "customer" },
-  { pattern: /^\/app\/customers\/([^/]+)$/, record: "customer" },
-  { pattern: /^\/app\/bookings\/([^/]+)$/, record: "booking" },
+  { pattern: /^\/app\/customers\/(?!new\/)([^/]+)\/edit$/, capabilities: ["customers.edit"], record: "customer" },
+  { pattern: /^\/app\/customers\/(?!new$)([^/]+)$/, record: "customer" },
+  { pattern: /^\/app\/bookings\/(?!new$)([^/]+)$/, record: "booking" },
   { pattern: /^\/app\/whatsapp\/inbox\/([^/]+)$/, record: "conversation" },
   { pattern: /^\/app\/whatsapp\/offers$/, capabilities: ["promotions.approve"] },
   { pattern: /^\/app\/whatsapp\/approve$/, capabilities: ["winback.approve"] },

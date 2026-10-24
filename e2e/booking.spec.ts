@@ -32,14 +32,15 @@ test("customer books a haircut with any barber", async ({ page }) => {
   await page.screenshot({ path: "e2e/.results/03-confirmed.png", fullPage: true });
 });
 
-test("rejects an invalid WhatsApp number", async ({ page }) => {
+test("rejects a foreign number typed without its country code, and says how to fix it", async ({ page }) => {
   await page.goto("/sharpandco");
   await page.getByRole("radio", { name: /^\d{2}:\d{2}$/ }).first().click();
   await page.getByLabel("Name").fill("Test User");
-  await page.getByLabel("WhatsApp number").fill("123456");
+  // A UK mobile in local format: not valid for this Nigerian salon until "+44" is added.
+  await page.getByLabel("WhatsApp number").fill("07400 123456");
   await humanPause(page);
   await page.getByRole("button", { name: "Confirm booking" }).click();
-  await expect(page.getByText("valid WhatsApp number")).toBeVisible();
+  await expect(page.getByText(/valid WhatsApp number\. If it's from outside Nigeria, start with \+/)).toBeVisible();
 });
 
 test("confirm explains what is missing instead of doing nothing", async ({ page }) => {

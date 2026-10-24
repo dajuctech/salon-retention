@@ -10,6 +10,7 @@ import {
   templateParams,
 } from "./templates";
 import { checkDraft } from "./ai-guardrails";
+import { metaBodyProblem } from "./template-builder";
 
 describe("templates (docs/whatsapp-templates.md)", () => {
   it("renders positional parameters in order", () => {
@@ -22,7 +23,7 @@ describe("templates (docs/whatsapp-templates.md)", () => {
       manage_link: "https://x/b/t",
     });
     expect(renderTemplate(t.body, params)).toBe(
-      "Hi Chuka, your haircut with Tunde is at 11:30 today. See you soon. To change it: https://x/b/t",
+      "Hi Chuka, your haircut with Tunde is at 11:30 today. To change it: https://x/b/t See you soon.",
     );
   });
 
@@ -37,6 +38,13 @@ describe("templates (docs/whatsapp-templates.md)", () => {
       const positions = [...t.body.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
       expect(Math.max(...positions), t.name).toBe(t.variables.length);
       if (t.category === "MARKETING") expect(t.body.endsWith(MARKETING_FOOTER), t.name).toBe(true);
+    }
+  });
+
+  // Meta rejects these automatically, so a broken template would cost days of re-approval.
+  it("follows WhatsApp's template rules: no variable at the start or end, none side by side", () => {
+    for (const t of PLATFORM_TEMPLATES) {
+      expect(metaBodyProblem(t.body), t.name).toBeNull();
     }
   });
 

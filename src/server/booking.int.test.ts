@@ -157,6 +157,7 @@ describe("createOnlineBooking", () => {
     expect(await createOnlineBooking(a.salon, input({ phone: "123456" }))).toMatchObject({
       ok: false,
       error: "invalid_phone",
+      message: expect.stringContaining("start with + and the country code"),
     });
   });
 

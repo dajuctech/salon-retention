@@ -3,6 +3,7 @@ import { onlinePaymentsReady } from "@/server/payments/providers";
 import { z } from "zod";
 import { MARKETING_CONSENT_WORDING, UTILITY_CONSENT_WORDING } from "@/domain/consent-wording";
 import { checkTransition } from "@/domain/booking-status";
+import { COUNTRIES } from "@/domain/countries";
 import { derivePaymentStatus } from "@/domain/payment-status";
 import { normalizePhone } from "@/domain/phone";
 import { audit } from "./audit";
@@ -56,7 +57,16 @@ export type BookingResult =
 
 export async function createOnlineBooking(salon: PublicSalon, input: BookingInput): Promise<BookingResult> {
   const phone = normalizePhone(input.phone, salon.countryCode);
-  if (!phone.ok) return { ok: false, error: "invalid_phone", message: "That doesn't look like a valid WhatsApp number." };
+  if (!phone.ok) {
+    // Local formats are read as the salon's country, so a visitor's foreign number needs its "+" code.
+    const country = COUNTRIES[salon.countryCode]?.name;
+    const outside = country ? `from outside ${country}` : "from another country";
+    return {
+      ok: false,
+      error: "invalid_phone",
+      message: `That doesn't look like a valid WhatsApp number. If it's ${outside}, start with + and the country code.`,
+    };
+  }
 
   const db = forSalon(salon.id);
   const service = await db.service.findFirst({ where: { id: input.serviceId, active: true } });

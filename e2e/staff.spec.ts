@@ -60,6 +60,44 @@ test("US-09 receptionist records a walk-in, then takes payment", async ({ page }
   expect(errors).toEqual([]);
 });
 
+test("US-07 / US-12 receptionist adds a customer, then books them from their profile", async ({ page }, info) => {
+  test.slow(); // a long journey: sign in, add, open the profile, find an open day, book
+  const errors = watch(page);
+  const name = `Desk Booking ${info.project.name}`;
+  await signIn(page, "reception@sharpandco.test");
+  await page.goto("/app/customers");
+  await page.getByRole("link", { name: "Add customer" }).click();
+  await expect(page.getByRole("heading", { name: "Add customer" })).toBeVisible();
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await page.getByLabel("Phone (WhatsApp)").fill(`0803 555 010${deviceNo(info)}`);
+  await page.getByRole("button", { name: "Add customer" }).click();
+  await expect(page.getByRole("heading", { name })).toBeVisible();
+
+  await page.getByRole("link", { name: "Book", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "New booking" })).toBeVisible();
+  await expect(page.getByText("Existing customer").locator("..")).toContainText(name);
+  // Not today: late in the day the salon is closed. Take the first later open day with a free time.
+  const times = page.getByRole("radiogroup", { name: "Time" });
+  const free = times.getByRole("radio", { name: /^\d{2}:\d{2}$/ });
+  const days = page.getByRole("radiogroup", { name: "Date" }).getByRole("radio");
+  for (let i = 1; i < (await days.count()); i++) {
+    if (await days.nth(i).isDisabled()) continue;
+    await days.nth(i).click();
+    await expect(days.nth(i)).toHaveAttribute("aria-checked", "true");
+    // Today had no free times, so any free time that appears belongs to this day.
+    if (await free.first().waitFor({ timeout: 5000 }).then(() => true, () => false)) break;
+  }
+  // A wide date row once stretched the form past a phone's screen and hid half the times.
+  const overflowing = await page.evaluate(() =>
+    [...document.querySelectorAll("fieldset")].filter((f) => f.getBoundingClientRect().right > window.innerWidth + 1).length,
+  );
+  expect(overflowing, "form sections wider than the screen").toBe(0);
+  await free.first().click();
+  await page.getByRole("button", { name: "Book it" }).click();
+  await expect(page.getByRole("status")).toContainText("Booked.");
+  expect(errors).toEqual([]);
+});
+
 test("US-22 owner approves all win-back drafts and they send", async ({ page }) => {
   test.skip(test.info().project.name !== "mobile", "drafts are consumed once per seed");
   const errors = watch(page);

@@ -1,5 +1,6 @@
 // WhatsApp templates (docs/whatsapp-templates.md). Bodies use Meta's positional {{1}} syntax;
-// `variables` names the value that fills each position, in order.
+// `variables` names the value that fills each position, in order. Meta rejects a body that starts or
+// ends with a variable, or has two variables side by side, so fixed words always surround them.
 
 export type MessageType =
   | "BOOKING_CONFIRMATION"
@@ -37,21 +38,21 @@ export const PLATFORM_TEMPLATES: readonly TemplateDef[] = [
     name: "booking_confirmation_v1",
     type: "BOOKING_CONFIRMATION",
     category: "UTILITY",
-    body: "Hi {{1}}, your {{2}} at {{3}} is booked for {{4}} with {{5}}. Booking ref {{6}}. To change or cancel: {{7}}",
+    body: "Hi {{1}}, your {{2}} at {{3}} is booked for {{4}} with {{5}}. Booking ref {{6}}. To change or cancel: {{7}} See you then.",
     variables: ["first_name", "service_name", "salon_name", "date_time_local", "barber_name", "booking_ref", "manage_link"],
   },
   {
     name: "reminder_day_before_v1",
     type: "REMINDER_DAY_BEFORE",
     category: "UTILITY",
-    body: "Hi {{1}}, your {{2}} with {{3}} is tomorrow at {{4}}. To change it: {{5}}",
+    body: "Hi {{1}}, your {{2}} with {{3}} is tomorrow at {{4}}. To change it: {{5}} See you tomorrow.",
     variables: ["first_name", "service_name", "barber_name", "time_local", "manage_link"],
   },
   {
     name: "reminder_2h_v1",
     type: "REMINDER_2H",
     category: "UTILITY",
-    body: "Hi {{1}}, your {{2}} with {{3}} is at {{4}} today. See you soon. To change it: {{5}}",
+    body: "Hi {{1}}, your {{2}} with {{3}} is at {{4}} today. To change it: {{5}} See you soon.",
     variables: ["first_name", "service_name", "barber_name", "time_local", "manage_link"],
   },
   {
@@ -79,18 +80,18 @@ export const PLATFORM_TEMPLATES: readonly TemplateDef[] = [
     variables: ["first_name", "salon_name", "offer_line", "booking_link"],
   },
   {
-    // The owner-approved campaign text fills {{1}} (src/server/staff/campaigns.ts).
+    // The owner-approved campaign text fills {{2}} (src/server/staff/campaigns.ts).
     name: "promotion_generic_v1",
     type: "PROMOTION",
     category: "MARKETING",
-    body: `{{1}} Book: {{2}} ${MARKETING_FOOTER}`,
-    variables: ["promotion_body", "booking_link"],
+    body: `Message from {{1}}: {{2}} Book: {{3}} ${MARKETING_FOOTER}`,
+    variables: ["salon_name", "promotion_body", "booking_link"],
   },
   {
     name: "birthday_v1",
     type: "BIRTHDAY",
     category: "MARKETING",
-    body: `Happy birthday {{1}}! 🎉 Everyone at {{2}} wishes you a great day. {{3}} {{4}} ${MARKETING_FOOTER}`,
+    body: `Happy birthday {{1}}! 🎉 Everyone at {{2}} wishes you a great day. {{3}} Book your next cut: {{4}} ${MARKETING_FOOTER}`,
     variables: ["first_name", "salon_name", "offer_line", "booking_link"],
   },
 ];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTemplate, templateToWording } from "./template-builder";
+import { buildTemplate, metaBodyProblem, templateToWording } from "./template-builder";
 import { PLATFORM_TEMPLATES, renderTemplate, templateParams } from "./templates";
 
 describe("US-22 AC5 template builder", () => {
@@ -14,6 +14,13 @@ describe("US-22 AC5 template builder", () => {
       "Hi {{1}} {{2}} Reply STOP to opt out.",
     );
     expect(buildTemplate("Hi {{first_name}}", { marketing: false }).body).toBe("Hi {{1}}");
+  });
+
+  it("spots wording WhatsApp would reject: a variable first, last, or two side by side", () => {
+    expect(metaBodyProblem("{{1}}, your cut is due. Reply STOP to opt out.")).toBe("starts_with_variable");
+    expect(metaBodyProblem("To change it: {{1}}")).toBe("ends_with_variable");
+    expect(metaBodyProblem("Hi {{1}}. {{2}} {{3}} Reply STOP to opt out.")).toBe("adjacent_variables");
+    expect(metaBodyProblem("Hi {{1}}. {{2}} Book: {{3}} Reply STOP to opt out.")).toBeNull();
   });
 
   it("round-trips the platform win-back templates", () => {

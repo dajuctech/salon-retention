@@ -422,7 +422,7 @@ describe("Offer campaigns (PRD §7 flow 5, BR-PR1–PR3)", () => {
     expect(preview.value.excluded.noConsent).toBeGreaterThanOrEqual(1);
     expect(preview.value.excluded.holdout).toBeGreaterThanOrEqual(1);
     expect(preview.value.excluded.badNumber).toBeGreaterThanOrEqual(1);
-    expect(preview.value.preview).toMatch(/^Hi \w+, Sharp & Co\. has something for you: Enjoy 15% off any haircut until 31 Dec\. Book: http\S+ Reply STOP to opt out\.$/);
+    expect(preview.value.preview).toMatch(/^Message from Sharp & Co\.: Hi \w+, Sharp & Co\. has something for you: Enjoy 15% off any haircut until 31 Dec\. Book: http\S+ Reply STOP to opt out\.$/);
 
     expect(await sendCampaign(w.owner, { promotionId: p.id, segment: "all", wording: "Get 50% off today! {{offer}}" }, NOW)).toMatchObject({ ok: false });
     await expect(sendCampaign(w.reception, { promotionId: p.id, segment: "all", wording }, NOW)).rejects.toBeInstanceOf(ForbiddenError);
@@ -564,6 +564,18 @@ describe("US-30 AI copy assistant and its feedback loop (ai-design.md §6)", () 
     expect(after).toMatchObject({ selectedIndex: 1, finalText: edited, approvedById: w.owner.member.userId });
     const [summary] = summariseGenerations([after]);
     expect(summary).toMatchObject({ adoptionRate: 1, keptAsIsRate: 0, guardrailPassRate: 0.5 });
+  });
+
+  it("refuses wording WhatsApp would reject, and says how to fix it", async () => {
+    const { saveWording } = await import("./copy-assistant");
+    expect(await saveWording(w.owner, { variant: "friendly", wording: "{{first_name}}, time for a cut? {{booking_link}}" })).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/Start with a word/),
+    });
+    expect(await saveWording(w.owner, { variant: "with_offer", wording: "Hi {{first_name}}! {{offer}} {{booking_link}}" })).toMatchObject({
+      ok: false,
+      message: expect.stringMatching(/between two placeholders/),
+    });
   });
 
   it("refuses once the salon's monthly AI budget is used up", async () => {

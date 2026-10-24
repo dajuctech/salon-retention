@@ -17,6 +17,16 @@ export function buildTemplate(wording: string, opts: { marketing: boolean }): { 
   return { body: opts.marketing ? `${body} ${MARKETING_FOOTER}` : body, variables };
 }
 
+export type MetaBodyProblem = "starts_with_variable" | "ends_with_variable" | "adjacent_variables";
+
+/** Meta rejects a template body that starts or ends with a variable, or has two side by side. */
+export function metaBodyProblem(body: string): MetaBodyProblem | null {
+  if (/^\s*\{\{\d+\}\}/.test(body)) return "starts_with_variable";
+  if (/\{\{\d+\}\}\s*$/.test(body)) return "ends_with_variable";
+  if (/\{\{\d+\}\}\s*\{\{\d+\}\}/.test(body)) return "adjacent_variables";
+  return null;
+}
+
 /** The reverse, for showing an existing template in the editor. */
 export function templateToWording(body: string, variables: readonly string[]): string {
   const named = Object.fromEntries(Object.entries(VALUE_NAME).map(([k, v]) => [v, k]));

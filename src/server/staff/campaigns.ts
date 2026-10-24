@@ -6,7 +6,7 @@ import { checkDraft } from "@/domain/ai-guardrails";
 import { firstName } from "@/domain/format";
 import { estimateCostUsd, frequencyCapAllows } from "@/domain/messaging-rules";
 import { isPromotionActive, offerLine } from "@/domain/offers";
-import { MARKETING_FOOTER } from "@/domain/templates";
+import { renderTemplate, templateFor } from "@/domain/templates";
 import { localDateKey } from "@/domain/time";
 import { audit } from "@/server/audit";
 import { assertCan } from "@/server/authz";
@@ -123,7 +123,11 @@ export async function previewCampaign(ctx: StaffCtx, input: { promotionId: strin
       wordingError,
       preview: wordingError
         ? null
-        : `${personalise(input.wording, { first_name: sample ? firstName(sample.name) : "Segun", salon_name: ctx.salon.name, offer: promo.line })} Book: ${bookingPageUrl(ctx.salon.slug)} ${MARKETING_FOOTER}`,
+        : renderTemplate(templateFor("PROMOTION")!.body, [
+            ctx.salon.name,
+            personalise(input.wording, { first_name: sample ? firstName(sample.name) : "Segun", salon_name: ctx.salon.name, offer: promo.line }),
+            bookingPageUrl(ctx.salon.slug),
+          ]),
     },
   };
 }
@@ -149,7 +153,7 @@ export async function sendCampaign(
       type: "PROMOTION",
       customerId: c.id,
       promotionId: promo.id,
-      values: { promotion_body: body, booking_link: bookingPageUrl(ctx.salon.slug) },
+      values: { salon_name: ctx.salon.name, promotion_body: body, booking_link: bookingPageUrl(ctx.salon.slug) },
       scheduledFor: now,
       // One send of the same offer per customer per day, even if the owner presses twice.
       subjectId: `${c.id}@${promo.id}`,

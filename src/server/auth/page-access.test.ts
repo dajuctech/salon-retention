@@ -1,5 +1,5 @@
 // The proxy's 404 rules must match what each page checks for itself, or the two drift apart.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ruleFor, STAFF_PAGE_RULES } from "./page-access";
 
@@ -36,8 +36,17 @@ describe("staff page rules (proxy 404s)", () => {
   }
 
   it("leaves ungated pages alone", () => {
-    for (const p of ["/app", "/app/calendar", "/app/customers", "/app/payments", "/app/more", "/app/walk-in"]) {
+    for (const p of ["/app", "/app/calendar", "/app/customers", "/app/customers/new", "/app/bookings/new", "/app/payments", "/app/more", "/app/walk-in"]) {
       expect(ruleFor(p), p).toBeNull();
     }
+  });
+
+  // A record rule like /app/bookings/<id> must not swallow a fixed page such as /app/bookings/new.
+  it("never treats a fixed page as a record", () => {
+    const fixed = readdirSync("src/app/app", { recursive: true, encoding: "utf8" })
+      .filter((f) => f.endsWith("page.tsx") && !f.includes("["))
+      .map((f) => `/app/${f}`.replace(/\/?page\.tsx$/, ""));
+    expect(fixed).toContain("/app/bookings/new");
+    for (const route of fixed) expect(ruleFor(route)?.rule.record, route).toBeUndefined();
   });
 });

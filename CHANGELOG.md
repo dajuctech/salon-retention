@@ -17,6 +17,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 - Accessibility: screen readers now read a barber's name only ("Tunde"), not the initials badge as well ("TU Tunde").
 - A browser test depended on the time of day it ran; it now uses a barber's next working day.
 - `CODEOWNERS` now names a real GitHub account.
+- Phones: on the staff New booking and Booking detail pages, the scrolling row of dates stretched its form section to almost twice the screen width, hiding half the time slots. Form sections can no longer grow wider than the screen, and a browser test checks it.
+- WhatsApp templates: five of the eight would have been rejected by Meta automatically (a blank at the start or end, or two blanks side by side). Their wording now has fixed words around every blank, `promotion_generic_v1` starts with the salon's name, a unit test checks every template against Meta's rules, and owners get a plain explanation if their own wording breaks them.
+- Staff "New booking" and "Add customer" pages answered 404: the access rule for `/app/bookings/<id>` and `/app/customers/<id>` treated `new` as a record id. A unit test now checks every fixed staff page, and a browser test adds a customer and books them.
+- Booking page: a foreign number typed without its country code (e.g. a UK `07…` number at a Nigerian salon) was refused with no explanation. The message now says to start with + and the country code.
 
 ### Added
 - Calendar week view (US-14) and month view with bookings per day (US-15); payment status on every booking (US-14 AC3).
